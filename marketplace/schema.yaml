@@ -52,30 +52,34 @@ properties:
   gcpProjectId:
     type: string
     title: Google Cloud project ID
+    default: ''
     description: >-
       The project containing the infrastructure created by the ConnectHealth
       Infrastructure Manager blueprint.
   serviceAccount.gcpServiceAccount:
     type: string
     title: Application service account
+    default: ''
     description: >-
       Terraform output "gcp_service_account_email". The Kubernetes service
       account impersonates this via Workload Identity to reach Cloud Storage,
       Firestore, Pub/Sub and Secret Manager.
-    pattern: '^[^@]+@[^.]+\.iam\.gserviceaccount\.com$'
+    pattern: '^$|^[^@]+@[^.]+\.iam\.gserviceaccount\.com$'
 
   # --- Networking -----------------------------------------------------------
   appDomain:
     type: string
     title: Application domain
+    default: ''
     description: >-
       Hostname the application is served on, e.g. connecthealth.example.com. Its
       DNS A record must ALREADY point at the static IP below - Google will not
       issue the managed TLS certificate until it resolves.
-    pattern: '^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)+$'
+    pattern: '^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)+$'
   ingress.staticIpName:
     type: string
     title: Static IP name
+    default: ''
     description: Terraform output "ingress_static_ip_name".
   cloudArmor.securityPolicyName:
     type: string
@@ -89,12 +93,14 @@ properties:
   filestore.storageClass.network:
     type: string
     title: VPC network name
+    default: ''
     description: >-
       Terraform output "vpc_network_name". Filestore volumes are provisioned
       into this VPC; a mismatch produces volumes the cluster cannot mount.
   filestore.storageClass.reservedIpRange:
     type: string
     title: Filestore reserved IP range name
+    default: ''
     description: >-
       NAME (not CIDR) of the reserved range for private service access, from the
       blueprint's network outputs. Required because the chart provisions
@@ -102,12 +108,14 @@ properties:
   config.gcsBucketName:
     type: string
     title: Flows bucket
+    default: ''
     description: Terraform output "flows_bucket_name".
 
   # --- Data services --------------------------------------------------------
   config.firestoreContextDatabase:
     type: string
     title: Firestore database
+    default: ''
     description: >-
       Terraform output "firestore_database_name". Required - if unset the
       application falls back to Firestore's "(default)" database, which the
@@ -115,18 +123,21 @@ properties:
   config.pubsubTopicId:
     type: string
     title: Pub/Sub topic
+    default: ''
     description: Terraform output "container_sync_topic_name".
 
   # --- Logging --------------------------------------------------------------
   config.auditLog.bucket:
     type: string
     title: Audit log bucket
+    default: ''
     description: >-
       Terraform output "app_audit_log_bucket". The in-app audit viewer reads
       from this Cloud Logging bucket.
   config.applicationLog.bucket:
     type: string
     title: Application log bucket
+    default: ''
     description: Terraform output "app_operational_log_bucket".
   config.auditLog.location:
     type: string
