@@ -1,0 +1,217 @@
+# =============================================================================
+# ConnectHealth - Google Cloud Marketplace deployment schema
+# =============================================================================
+# This file IS the deployment form the customer fills in. Every property below
+# becomes a field on the Marketplace deploy screen and is passed to Helm as a
+# value.
+#
+# ARCHITECTURE THIS ASSUMES: the cloud infrastructure - VPC, GKE cluster, KMS
+# key, Firestore database, buckets, Pub/Sub topic, service account, static IP
+# and Cloud Armor policy - is provisioned SEPARATELY by the ConnectHealth
+# Infrastructure Manager blueprint, before this app is deployed. The customer
+# runs that first, then copies its outputs into the fields below. Nothing here
+# creates cloud resources; this installs the application into a cluster that
+# already has them.
+#
+# Each field's description names the exact Terraform output it comes from, so
+# the customer can match them one-to-one against the Infrastructure Manager
+# outputs page rather than guessing.
+# =============================================================================
+x-google-marketplace:
+  schemaVersion: v2
+  applicationApiVersion: v1beta1
+  publishedVersion: '1.0.0'
+  publishedVersionMetadata:
+    releaseNote: >-
+      Initial ConnectHealth release for Google Cloud Marketplace. Deploys the
+      FHIR/HL7 integration platform into a GKE cluster provisioned by the
+      ConnectHealth Infrastructure Manager blueprint.
+
+  # All images the chart uses must be declared here. Marketplace rewrites these
+  # values at deploy time to point at its own verified copy of the image, which
+  # is why the chart must never hardcode a registry.
+  images:
+    '':
+      properties:
+        image.repository:
+          type: REPO_WITH_REGISTRY
+        image.tag:
+          type: TAG
+
+properties:
+  name:
+    type: string
+    x-google-marketplace:
+      type: NAME
+  namespace:
+    type: string
+    x-google-marketplace:
+      type: NAMESPACE
+
+  # --- Identity -------------------------------------------------------------
+  gcpProjectId:
+    type: string
+    title: Google Cloud project ID
+    description: >-
+      The project containing the infrastructure created by the ConnectHealth
+      Infrastructure Manager blueprint.
+  serviceAccount.gcpServiceAccount:
+    type: string
+    title: Application service account
+    description: >-
+      Terraform output "gcp_service_account_email". The Kubernetes service
+      account impersonates this via Workload Identity to reach Cloud Storage,
+      Firestore, Pub/Sub and Secret Manager.
+    pattern: '^[^@]+@[^.]+\.iam\.gserviceaccount\.com$'
+
+  # --- Networking -----------------------------------------------------------
+  appDomain:
+    type: string
+    title: Application domain
+    description: >-
+      Hostname the application is served on, e.g. connecthealth.example.com. Its
+      DNS A record must ALREADY point at the static IP below - Google will not
+      issue the managed TLS certificate until it resolves.
+    pattern: '^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)+$'
+  ingress.staticIpName:
+    type: string
+    title: Static IP name
+    description: Terraform output "ingress_static_ip_name".
+  cloudArmor.securityPolicyName:
+    type: string
+    title: Cloud Armor policy name
+    description: >-
+      Terraform output "cloud_armor_policy_name". Leave empty only if the
+      blueprint was deployed with enable_cloud_armor = false.
+    default: ''
+
+  # --- Storage --------------------------------------------------------------
+  filestore.storageClass.network:
+    type: string
+    title: VPC network name
+    description: >-
+      Terraform output "vpc_network_name". Filestore volumes are provisioned
+      into this VPC; a mismatch produces volumes the cluster cannot mount.
+  filestore.storageClass.reservedIpRange:
+    type: string
+    title: Filestore reserved IP range name
+    description: >-
+      NAME (not CIDR) of the reserved range for private service access, from the
+      blueprint's network outputs. Required because the chart provisions
+      Filestore with PRIVATE_SERVICE_ACCESS.
+  config.gcsBucketName:
+    type: string
+    title: Flows bucket
+    description: Terraform output "flows_bucket_name".
+
+  # --- Data services --------------------------------------------------------
+  config.firestoreContextDatabase:
+    type: string
+    title: Firestore database
+    description: >-
+      Terraform output "firestore_database_name". Required - if unset the
+      application falls back to Firestore's "(default)" database, which the
+      blueprint does not create, and the context store fails at startup.
+  config.pubsubTopicId:
+    type: string
+    title: Pub/Sub topic
+    description: Terraform output "container_sync_topic_name".
+
+  # --- Logging --------------------------------------------------------------
+  config.auditLog.bucket:
+    type: string
+    title: Audit log bucket
+    description: >-
+      Terraform output "app_audit_log_bucket". The in-app audit viewer reads
+      from this Cloud Logging bucket.
+  config.applicationLog.bucket:
+    type: string
+    title: Application log bucket
+    description: Terraform output "app_operational_log_bucket".
+  config.auditLog.location:
+    type: string
+    title: Log bucket region
+    description: >-
+      Terraform output "app_log_bucket_location". Must match the buckets' actual
+      region - a wrong value makes the audit viewer return an empty list rather
+      than an error.
+    default: us-east1
+  config.applicationLog.location:
+    type: string
+    title: Application log bucket region
+    description: Same value as the audit log bucket region.
+    default: us-east1
+
+  # --- Application ----------------------------------------------------------
+  config.secretBasePrefix:
+    type: string
+    title: Secret Manager prefix
+    description: >-
+      Namespace for every secret this deployment creates in Secret Manager -
+      the administrator login, signing keys and integration credentials. Must be
+      unique to this deployment; two deployments sharing a prefix share their
+      administrator account. Cannot be changed after install without stranding
+      every secret under the old prefix.
+    default: ehrconnect/prod/
+  config.ehrProviders:
+    type: string
+    title: EHR providers
+    description: Comma-separated list of EHR systems to enable.
+    default: EPIC
+
+  # --- Generated secrets ----------------------------------------------------
+  # Generated rather than collected: JWT_SECRET is also the argon2 PEPPER for
+  # password hashing, so it must never be a shared or guessable value, and it
+  # must never change after install - doing so invalidates every stored password
+  # hash irrecoverably.
+  secrets.jwtSecret:
+    type: string
+    title: Token signing key
+    x-google-marketplace:
+      type: GENERATED_PASSWORD
+      generatedPassword:
+        length: 48
+        includeSymbols: false
+        base64: false
+  secrets.nodeRedCredentialSecret:
+    type: string
+    title: Workflow credential key
+    x-google-marketplace:
+      type: GENERATED_PASSWORD
+      generatedPassword:
+        length: 32
+        includeSymbols: false
+        base64: false
+  secrets.adminInitialPassword:
+    type: string
+    title: Initial administrator password
+    description: >-
+      Password for the "administrator" account seeded on first start. Change it
+      immediately after the first login.
+    x-google-marketplace:
+      type: GENERATED_PASSWORD
+      generatedPassword:
+        length: 20
+        includeSymbols: true
+        base64: false
+
+  # Renders the Application resource Marketplace requires. Always true here.
+  marketplace.enabled:
+    type: boolean
+    default: true
+
+required:
+  - name
+  - namespace
+  - gcpProjectId
+  - serviceAccount.gcpServiceAccount
+  - appDomain
+  - ingress.staticIpName
+  - filestore.storageClass.network
+  - filestore.storageClass.reservedIpRange
+  - config.gcsBucketName
+  - config.firestoreContextDatabase
+  - config.pubsubTopicId
+  - config.auditLog.bucket
+  - config.applicationLog.bucket
+  - config.secretBasePrefix

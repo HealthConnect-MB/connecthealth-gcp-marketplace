@@ -1,0 +1,15 @@
+# Terraform state and local runs - never commit these
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+crash.log
+
+# Variable files. Deployment inputs are supplied through Infrastructure Manager
+# parameters, NOT through committed tfvars. An admin password was once committed
+# in a tfvars file and published to a world-readable bucket; this rule exists so
+# that cannot recur.
+*.tfvars
+*.tfvars.json
+
+.DS_Store
